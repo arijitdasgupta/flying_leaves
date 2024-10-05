@@ -70,6 +70,7 @@ fn main() -> ! {
     let mut led_pin = pins.gpio25.into_push_pull_output();
     let mut rot_cw = pins.gpio7.into_pull_up_input();
     let mut rot_ccw = pins.gpio8.into_pull_up_input();
+    let mut row_bt = pins.gpio9.into_pull_up_input();
 
     use ssd1306::{mode::BufferedGraphicsMode, prelude::*, I2CDisplayInterface, Ssd1306};
     let mut i2c = hal::I2C::i2c0(
@@ -98,15 +99,15 @@ fn main() -> ! {
 
     loop {
         if rot_cw.is_low().unwrap() {
-            info!("CW");
             if let Some(n) = number.checked_add(1) {
                 number = n;
             }
         } else if rot_ccw.is_low().unwrap() {
-            info!("CCW");
             if let Some(n) = number.checked_sub(1) {
                 number = n;
             }
+        } else if row_bt.is_low().unwrap() {
+            number = 128;
         }
 
         let mut screen_data = String::<3>::new();
@@ -115,8 +116,7 @@ fn main() -> ! {
         Text::with_baseline(&screen_data, Point::zero(), text_style, Baseline::Top)
             .draw(&mut display)
             .unwrap();
+        timer.delay_us(100);
         display.flush().unwrap();
-
-        timer.delay_ms(10);
     }
 }
