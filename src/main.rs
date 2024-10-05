@@ -1,6 +1,8 @@
 #![no_std]
 #![no_main]
 
+use core::fmt::Write;
+use cortex_m::asm::delay;
 use cortex_m_rt::entry;
 use defmt::{info, println};
 use defmt_rtt as _;
@@ -10,17 +12,21 @@ use embedded_graphics::{
     prelude::*,
     text::{Baseline, Text},
 };
-use embedded_hal::{delay::DelayNs, digital::OutputPin};
+use embedded_hal::{
+    delay::DelayNs,
+    digital::{InputPin, OutputPin},
+};
 use hal::fugit::RateExtU32;
+use heapless::String;
 use panic_probe as _;
 use rp_pico::{
     hal::{
         self,
         clocks::init_clocks_and_plls,
-        gpio::{FunctionI2C, Pin},
+        gpio::{FunctionI2C, Interrupt, Pin},
         Clock, Watchdog,
     },
-    pac,
+    pac::{self, io_bank0::gpio::GPIO_STATUS},
 };
 use ssd1306::{mode::BufferedGraphicsMode, prelude::*, I2CDisplayInterface, Ssd1306};
 
@@ -62,6 +68,8 @@ fn main() -> ! {
 
     // Configure GPIO25 as an output
     let mut led_pin = pins.gpio25.into_push_pull_output();
+    let mut rot_cw = pins.gpio7.into_pull_up_input();
+    let mut rot_ccw = pins.gpio8.into_pull_up_input();
 
     use ssd1306::{mode::BufferedGraphicsMode, prelude::*, I2CDisplayInterface, Ssd1306};
     let mut i2c = hal::I2C::i2c0(
@@ -77,25 +85,38 @@ fn main() -> ! {
         .into_buffered_graphics_mode();
     display.init().unwrap();
 
+    let mut number: u8 = 15;
+
     let text_style = MonoTextStyleBuilder::new()
         .font(&FONT_8X13)
         .text_color(BinaryColor::On)
         .build();
 
-    Text::with_baseline("Hi\nWorld", Point::zero(), text_style, Baseline::Top)
-        .draw(&mut display)
-        .unwrap();
-
     // Text::with_baseline("", Point::new(0, 16), text_style, Baseline::Top)
     //     .draw(&mut display)
     //     .unwrap();
 
-    display.flush().unwrap();
-
     loop {
-        timer.delay_ms(1000);
-        let _ = led_pin.set_high();
-        timer.delay_ms(100);
-        let _ = led_pin.set_low();
+        if rot_cw.is_low().unwrap() {
+            info!("CW");
+            if let Some(n) = number.checked_add(1) {
+                number = n;
+            }
+        } else if rot_ccw.is_low().unwrap() {
+            info!("CCW");
+            if let Some(n) = number.checked_sub(1) {
+                number = n;
+            }
+        }
+
+        let mut screen_data = String::<3>::new();
+        let _ = write!(screen_data, "{number}");
+        let _ = display.clear(BinaryColor::Off);
+        Text::with_baseline(&screen_data, Point::zero(), text_style, Baseline::Top)
+            .draw(&mut display)
+            .unwrap();
+        display.flush().unwrap();
+
+        timer.delay_ms(10);
     }
 }

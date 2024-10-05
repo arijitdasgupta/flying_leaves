@@ -13,6 +13,7 @@ cortex-m = "0.7"
 cortex-m-rt = "0.7"
 ssd1306 = "0.9.0"
 embedded-graphics = "0.8.1"
+heapless = "0.8.0"
 # but you can use any BSP. Uncomment this to use the pro_micro_rp2040 BSP instead
 # sparkfun-pro-micro-rp2040 = "0.8"
 

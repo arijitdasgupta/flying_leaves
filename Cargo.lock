@@ -287,6 +287,7 @@ dependencies = [
  "defmt-rtt",
  "embedded-graphics",
  "embedded-hal 1.0.0",
+ "heapless",
  "panic-probe",
  "rp-pico",
  "ssd1306",
