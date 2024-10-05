@@ -11,6 +11,8 @@ embedded-hal = "1.0.0"
 rp-pico = "0.9"
 cortex-m = "0.7"
 cortex-m-rt = "0.7"
+ssd1306 = "0.9.0"
+embedded-graphics = "0.8.1"
 # but you can use any BSP. Uncomment this to use the pro_micro_rp2040 BSP instead
 # sparkfun-pro-micro-rp2040 = "0.8"
 

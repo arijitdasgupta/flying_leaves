@@ -1,17 +1,28 @@
 #![no_std]
 #![no_main]
 
-use core::module_path;
 use cortex_m_rt::entry;
 use defmt::{info, println};
 use defmt_rtt as _;
+use embedded_graphics::{
+    mono_font::{ascii::FONT_6X10, MonoTextStyleBuilder},
+    pixelcolor::BinaryColor,
+    prelude::*,
+    text::{Baseline, Text},
+};
 use embedded_hal::{delay::DelayNs, digital::OutputPin};
+use hal::fugit::RateExtU32;
 use panic_probe as _;
 use rp_pico::{
-    hal,
-    hal::{clocks::init_clocks_and_plls, Clock, Watchdog},
+    hal::{
+        self,
+        clocks::init_clocks_and_plls,
+        gpio::{FunctionI2C, Pin},
+        Clock, Watchdog,
+    },
     pac,
 };
+use ssd1306::{mode::BufferedGraphicsMode, prelude::*, I2CDisplayInterface, Ssd1306};
 
 #[entry]
 fn main() -> ! {
@@ -45,14 +56,46 @@ fn main() -> ! {
     );
 
     let mut timer = hal::Timer::new(peripherals.TIMER, &mut peripherals.RESETS, &clocks);
+    // Configure two pins as being I²C, not GPIO
+    let sda_pin: Pin<_, FunctionI2C, _> = pins.gpio4.reconfigure();
+    let scl_pin: Pin<_, FunctionI2C, _> = pins.gpio5.reconfigure();
 
     // Configure GPIO25 as an output
     let mut led_pin = pins.gpio25.into_push_pull_output();
 
+    use ssd1306::{mode::BufferedGraphicsMode, prelude::*, I2CDisplayInterface, Ssd1306};
+    let mut i2c = hal::I2C::i2c0(
+        peripherals.I2C0,
+        sda_pin,
+        scl_pin, // Try `not_an_scl_pin` here
+        400.kHz(),
+        &mut peripherals.RESETS,
+        &clocks.system_clock,
+    );
+    let interface = I2CDisplayInterface::new(i2c);
+    let mut display = Ssd1306::new(interface, DisplaySize128x32, DisplayRotation::Rotate0)
+        .into_buffered_graphics_mode();
+    display.init().unwrap();
+
+    let text_style = MonoTextStyleBuilder::new()
+        .font(&FONT_6X10)
+        .text_color(BinaryColor::On)
+        .build();
+
+    Text::with_baseline("Hello world!", Point::zero(), text_style, Baseline::Top)
+        .draw(&mut display)
+        .unwrap();
+
+    Text::with_baseline("Hello Rust!", Point::new(0, 16), text_style, Baseline::Top)
+        .draw(&mut display)
+        .unwrap();
+
+    display.flush().unwrap();
+
     loop {
         timer.delay_ms(1000);
-        led_pin.set_high();
+        let _ = led_pin.set_high();
         timer.delay_ms(100);
-        led_pin.set_low();
+        let _ = led_pin.set_low();
     }
 }
