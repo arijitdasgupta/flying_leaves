@@ -5,7 +5,7 @@ use cortex_m_rt::entry;
 use defmt::{info, println};
 use defmt_rtt as _;
 use embedded_graphics::{
-    mono_font::{ascii::FONT_6X10, MonoTextStyleBuilder},
+    mono_font::{ascii::FONT_6X10, iso_8859_7::FONT_8X13, MonoTextStyleBuilder},
     pixelcolor::BinaryColor,
     prelude::*,
     text::{Baseline, Text},
@@ -73,22 +73,22 @@ fn main() -> ! {
         &clocks.system_clock,
     );
     let interface = I2CDisplayInterface::new(i2c);
-    let mut display = Ssd1306::new(interface, DisplaySize128x32, DisplayRotation::Rotate0)
+    let mut display = Ssd1306::new(interface, DisplaySize128x32, DisplayRotation::Rotate90)
         .into_buffered_graphics_mode();
     display.init().unwrap();
 
     let text_style = MonoTextStyleBuilder::new()
-        .font(&FONT_6X10)
+        .font(&FONT_8X13)
         .text_color(BinaryColor::On)
         .build();
 
-    Text::with_baseline("Hello world!", Point::zero(), text_style, Baseline::Top)
+    Text::with_baseline("Hi\nWorld", Point::zero(), text_style, Baseline::Top)
         .draw(&mut display)
         .unwrap();
 
-    Text::with_baseline("Hello Rust!", Point::new(0, 16), text_style, Baseline::Top)
-        .draw(&mut display)
-        .unwrap();
+    // Text::with_baseline("", Point::new(0, 16), text_style, Baseline::Top)
+    //     .draw(&mut display)
+    //     .unwrap();
 
     display.flush().unwrap();
 
