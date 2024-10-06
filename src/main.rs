@@ -29,15 +29,15 @@ use rp_pico::hal::{
     pac::interrupt,
     Clock, Watchdog,
 };
-
 use ssd1306::{mode::BufferedGraphicsMode, prelude::*, I2CDisplayInterface, Ssd1306};
 
 type ClockwisePin = gpio::Pin<gpio::bank0::Gpio7, gpio::FunctionSioInput, gpio::PullUp>;
 type AntiClockwisePin = gpio::Pin<gpio::bank0::Gpio8, gpio::FunctionSioInput, gpio::PullUp>;
+type ButtonPin = gpio::Pin<gpio::bank0::Gpio9, gpio::FunctionSioInput, gpio::PullUp>;
 
-type InputAndState = (ClockwisePin, AntiClockwisePin);
+type InputPins = (ClockwisePin, AntiClockwisePin, ButtonPin);
 
-static GLOBAL_DATA: Mutex<RefCell<Option<InputAndState>>> = Mutex::new(RefCell::new(None));
+static GLOBAL_DATA: Mutex<RefCell<Option<InputPins>>> = Mutex::new(RefCell::new(None));
 static mut NUMBERS_Q: Queue<u8, 100> = Queue::new();
 
 #[entry]
@@ -78,15 +78,15 @@ fn main() -> ! {
     let mut led_pin = pins.gpio25.into_push_pull_output();
 
     // Rotation controls & associated interrupt
-    let mut rot_cw = pins.gpio7.into_pull_up_input();
-    let mut rot_ccw = pins.gpio8.into_pull_up_input();
+    let rot_cw = pins.gpio7.into_pull_up_input();
+    let rot_ccw = pins.gpio8.into_pull_up_input();
+    let rot_bt = pins.gpio9.into_pull_up_input();
     rot_cw.set_interrupt_enabled(EdgeLow, true);
     rot_ccw.set_interrupt_enabled(EdgeLow, true);
-
-    let mut row_bt = pins.gpio9.into_pull_up_input();
+    rot_bt.set_interrupt_enabled(EdgeLow, true);
 
     // Initializing display & text style etc.
-    use ssd1306::{mode::BufferedGraphicsMode, prelude::*, I2CDisplayInterface, Ssd1306};
+
     let mut i2c = hal::I2C::i2c0(
         peripherals.I2C0,
         sda_pin,
@@ -99,15 +99,16 @@ fn main() -> ! {
     let mut display = Ssd1306::new(interface, DisplaySize128x32, DisplayRotation::Rotate90)
         .into_buffered_graphics_mode();
     display.init().unwrap();
-
     let text_style = MonoTextStyleBuilder::new()
         .font(&FONT_8X13)
         .text_color(BinaryColor::On)
         .build();
 
-    // Initializing global state
+    // Initializing shared pins between main and interrupts
     critical_section::with(|cs| {
-        GLOBAL_DATA.borrow(cs).replace(Some((rot_cw, rot_ccw)));
+        GLOBAL_DATA
+            .borrow(cs)
+            .replace(Some((rot_cw, rot_ccw, rot_bt)));
     });
 
     let (_, mut rx) = unsafe { NUMBERS_Q.split() };
@@ -142,7 +143,7 @@ fn main() -> ! {
 
 #[interrupt]
 fn IO_IRQ_BANK0() {
-    static mut INPUTS_AND_STATE: Option<InputAndState> = None;
+    static mut INPUTS_AND_STATE: Option<InputPins> = None;
     static mut NUMBER: u8 = 128;
 
     let (mut tx, _) = unsafe { NUMBERS_Q.split() };
@@ -154,23 +155,25 @@ fn IO_IRQ_BANK0() {
     }
 
     if let Some(state_stuff) = INPUTS_AND_STATE {
-        let (rot_cw, rot_ccw) = state_stuff;
+        let (rot_cw, rot_ccw, rot_bt) = state_stuff;
 
         if rot_cw.interrupt_status(EdgeLow) {
             if let Some(nn) = NUMBER.checked_add(1) {
                 *NUMBER = nn;
             }
-            info!("CW {:?}", NUMBER);
-            rot_cw.clear_interrupt(EdgeLow);
             let _ = tx.enqueue(*NUMBER);
+            rot_cw.clear_interrupt(EdgeLow);
         } else if rot_ccw.interrupt_status(EdgeLow) {
             if let Some(nn) = NUMBER.checked_sub(1) {
                 *NUMBER = nn;
             }
 
-            info!("CCW {:?}", NUMBER);
-            rot_ccw.clear_interrupt(EdgeLow);
             let _ = tx.enqueue(*NUMBER);
+            rot_ccw.clear_interrupt(EdgeLow);
+        } else if rot_bt.interrupt_status(EdgeLow) {
+            *NUMBER = 128;
+            let _ = tx.enqueue(*NUMBER);
+            rot_bt.clear_interrupt(EdgeLow);
         }
     }
 }
