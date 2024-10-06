@@ -5,4 +5,5 @@ The first version with real-timey async library didn't really work out, so here 
 # Next
  - ~~Interrupts for reading rotary inputs.~~
  - ~shared state to display the values.~
+ - Explore spinlocking for multi-core shared data.
  - Debounce rotary inputs in software if possible with multi-core support.
