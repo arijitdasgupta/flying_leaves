@@ -5,4 +5,4 @@ The first version with real-timey async library didn't really work out, so here 
 # Next
  - ~~Interrupts for reading rotary inputs.~~
  - ~shared state to display the values.~
- - Debounce rotary inputs in software if possible.
+ - Debounce rotary inputs in software if possible with multi-core support.
