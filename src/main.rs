@@ -28,7 +28,7 @@ use rp_pico::{
         gpio::{self, FunctionI2C, Interrupt::EdgeLow, Pin},
         multicore::{Multicore, Stack},
         pac::{self, interrupt},
-        sio::SioFifo,
+        sio::{SioFifo, Spinlock0},
         Clock, Sio, Timer, Watchdog,
     },
     Pins,
@@ -43,6 +43,8 @@ type SharedPins<'a> = (ClockwisePin, AntiClockwisePin, ButtonPin);
 // Shared pins and SIO between CORE0 and IRQ. Sync between them is controlled by
 // cortex_m::critical_section & Mutex.
 static SHARED_PINS: Mutex<RefCell<Option<SharedPins>>> = Mutex::new(RefCell::new(None));
+
+static mut SHARED_STATE: u32 = 0;
 
 // Stack for core1
 static mut CORE1_STACK: Stack<8192> = Stack::new();
@@ -120,13 +122,14 @@ fn core1_task(clocks: ClocksManager) -> ! {
     loop {
         let mut screen_data = String::<4>::new();
         let mut screen_data_2 = String::<4>::new();
+        let mut screen_data_3 = String::<4>::new();
 
         if let Some(n) = rx.dequeue() {
             number = Some(n)
         }
         let _ = match number {
             Some(n) => write!(screen_data, "{n}"),
-            None => write!(screen_data, ""),
+            None => write!(screen_data, "NaN"),
         };
 
         if let Some(n) = sio.fifo.read() {
@@ -134,14 +137,23 @@ fn core1_task(clocks: ClocksManager) -> ! {
         }
         let _ = match number2 {
             Some(n) => write!(screen_data_2, "{n}"),
-            None => write!(screen_data_2, ""),
+            None => write!(screen_data_2, "NaN"),
         };
+
+        Spinlock0::claim();
+        let state = unsafe { SHARED_STATE };
+        let _ = write!(screen_data_3, "{state}");
+
+        // unsafe { Spinlock0::release() };
 
         let _ = display.clear(BinaryColor::Off);
         Text::with_baseline(&screen_data, Point::zero(), text_style, Baseline::Top)
             .draw(&mut display)
             .unwrap();
         Text::with_baseline(&screen_data_2, Point::new(0, 15), text_style, Baseline::Top)
+            .draw(&mut display)
+            .unwrap();
+        Text::with_baseline(&screen_data_3, Point::new(0, 30), text_style, Baseline::Top)
             .draw(&mut display)
             .unwrap();
         display.flush().unwrap();
@@ -222,6 +234,11 @@ fn IO_IRQ_BANK0() {
             let _ = tx.enqueue(*NUMBER);
             info!("BUTTON");
             rot_bt.clear_interrupt(EdgeLow);
+        }
+
+        let _lock = Spinlock0::claim();
+        unsafe {
+            SHARED_STATE = (SHARED_STATE + 1).min(9999);
         }
     }
 }
